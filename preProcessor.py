@@ -5,36 +5,42 @@ import random
 
 # Function to extract a query template as described in the paper
 def extract_template(sql_query):
-    # Step 1: Replace values in WHERE clause, SET, and VALUES with '?'
-    # Replace string literals (e.g., 'example@mail.com') with '?'
-    query_no_strings = re.sub(r"'[^']*'", "?", sql_query)
+    """Extracts a query template by normalizing values in WHERE, SET, and VALUES clauses."""
+    try:
+        # Step 1: Replace values in WHERE clause, SET, and VALUES with '?'
+        # Replace string literals with '?'
+        query_no_strings = re.sub(r"'[^']*'", "?", sql_query)
 
-    # Replace numeric literals (e.g., 123 or 100.50) with '?'
-    query_no_constants = re.sub(r"\b\d+(\.\d+)?\b", "?", query_no_strings)
+        # Replace numeric literals with '?'
+        query_no_constants = re.sub(r"\b\d+(\.\d+)?\b", "?", query_no_strings)
 
-    # Step 2: Parse the query to get the AST
-    parsed = sqlparse.parse(query_no_constants)[0]
+        # Step 2: Parse the query to get the AST
+        parsed = sqlparse.parse(query_no_constants)[0]
 
-    # Function to recursively process the AST and normalize tokens
-    def process_tokens(tokens):
-        result = []
-        for token in tokens:
-            if token.is_group:
-                result.append(process_tokens(token.tokens))
-            else:
-                result.append(token.value.upper() if token.ttype in sqlparse.tokens.Keyword else token.value)
-        return ' '.join(result)
+        # Function to recursively process the AST and normalize tokens
+        def process_tokens(tokens):
+            result = []
+            for token in tokens:
+                if token.is_group:
+                    result.append(process_tokens(token.tokens))
+                else:
+                    result.append(token.value.upper() if token.ttype in sqlparse.tokens.Keyword else token.value)
+            return ' '.join(result)
 
-    # Process the tokens to normalize spacing, case, and bracket/parenthesis placement
-    query_template = process_tokens(parsed.tokens)
+        # Process the tokens to normalize spacing, case, and bracket/parenthesis placement
+        query_template = process_tokens(parsed.tokens)
 
-    # Further cleanup of spaces, ensuring consistent single spacing
-    query_template = re.sub(r'\s+', ' ', query_template).strip()
-    
-    return query_template
+        # Further cleanup of spaces, ensuring consistent single spacing
+        query_template = re.sub(r'\s+', ' ', query_template).strip()
+        
+        return query_template
+    except Exception as e:
+        print(f"Error parsing query: {sql_query}, Error: {str(e)}")
+        return None
 
 # Function to perform reservoir sampling
 def reservoir_sampling(sample_size, items):
+    """Performs reservoir sampling to select a sample of items."""
     sample = []
     for i, item in enumerate(items):
         if i < sample_size:
@@ -47,6 +53,7 @@ def reservoir_sampling(sample_size, items):
 
 # Function to determine if two templates are semantically equivalent
 def are_templates_equivalent(template1, template2):
+    """Checks if two query templates are semantically equivalent."""
     # Parse the templates
     parsed1 = sqlparse.parse(template1)[0]
     parsed2 = sqlparse.parse(template2)[0]
@@ -67,7 +74,7 @@ def are_templates_equivalent(template1, template2):
         for token in parsed.tokens:
             if token.ttype in {sqlparse.tokens.Name, sqlparse.tokens.Name.Builtin}:
                 tables.add(token.value)
-            elif token.ttype is sqlparse.tokens.Keyword and token.value.upper() in {"WHERE", "SET", "VALUES"}:
+            elif token.ttype is sqlparse.tokens.Keyword and token.value.upper() in {"WHERE", "SET", "VALUES", "HAVING", "ON"}:
                 predicates.add(token.value.upper())
             elif token.ttype in {sqlparse.tokens.Wildcard, sqlparse.tokens.Name, sqlparse.tokens.Name.Builtin}:
                 projections.add(token.value.upper())
@@ -77,14 +84,19 @@ def are_templates_equivalent(template1, template2):
     tables2, predicates2, projections2 = extract_features(parsed2)
 
     # Check if the templates are equivalent
-    return tables1 == tables2 and predicates1 == predicates2 and projections1 == projections2
+    return (tables1 == tables2 and 
+            predicates1 == predicates2 and 
+            projections1 == projections2)
 
 # Example SQL queries
 sql_queries = [
     "SELECT name FROM users WHERE id = 123",
     "SELECT name FROM users WHERE id = 456",
     "INSERT INTO orders (user_id, amount) VALUES (1, 100.50)",
-    "UPDATE users SET email = 'example@mail.com' WHERE id = 456"
+    "UPDATE users SET email = 'example@mail.com' WHERE id = 456",
+    "SELECT DISTINCT name FROM users WHERE id = ?",
+    "SELECT name FROM users HAVING COUNT(*) > 1",
+    "DELETE FROM users WHERE id = ?"
 ]
 
 # Process the queries and extract templates
@@ -94,9 +106,10 @@ sample_size = 5  # Example sample size for reservoir sampling
 
 for sql in sql_queries:
     template = extract_template(sql)
-    template_counts[template] += 1
-    original_parameters[template].append(sql)
-    print(f"Template: {template}")
+    if template:  # Only process valid templates
+        template_counts[template] += 1
+        original_parameters[template].append(sql)
+        print(f"Template: {template}")
 
 # Perform reservoir sampling for original parameters
 sampled_parameters = {template: reservoir_sampling(sample_size, params) for template, params in original_parameters.items()}

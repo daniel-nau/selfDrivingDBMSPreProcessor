@@ -105,11 +105,12 @@ class QueryTracker:
 # Example SQL queries (including additional examples)
 sql_queries = [
     "SELECT name FROM users WHERE id = 123",
-    "SELECT name FROM users WHERE id = 456",
+    "select name FROM users WHERE id = 456",
     "INSERT INTO orders (user_id, amount) VALUES (1, 100.50), (2, 200.75)",
     "UPDATE users SET email = 'example@mail.com' WHERE id = 456",
     "DELETE FROM users WHERE last_login < '2024-01-01'",
     "SELECT * FROM orders WHERE user_id = 1 AND amount > 50",
+    "SELECT * FROM orders WHERE amount > 50 AND user_id = 1",
     "INSERT INTO products (name, price) VALUES ('Widget', 19.99)",
     "SELECT COUNT(*) FROM users WHERE status = 'active'",
     "UPDATE products SET stock = stock - 1 WHERE id = 3",
